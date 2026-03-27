@@ -1,4 +1,4 @@
-![Dual Audio In to Single Audio Out Device](dual_aux.jpg)  
+![Dual Audio In to Single Audio Out Device](dual_aux.jpg)
 
 -----------------------------------------------------------------
 
