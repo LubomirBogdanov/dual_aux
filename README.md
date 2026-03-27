@@ -1,7 +1,7 @@
-![Dual Audio In to Single Audio Out Device](dual_aux.jpg)
+![Dual Audio In to Single Audio Out Device](dual_aux.jpg)  
 
+Dual Audio In to Single Audio Out Device  
 -----------------------------------------------------------------
-
 This device implements a dual-input to single output  
 audio switching function. It can be UART interface controlled,   
 or via a two-button keyboard. Its state can be monitored over   
