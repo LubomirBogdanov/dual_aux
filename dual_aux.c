@@ -385,6 +385,18 @@ void byte_to_hex(uint8_t data_byte, char *hex_str) {
     hex_str[3] = '\0';        
 }
 
+/*!
+* \brief A function to set the relay state.
+*
+* Since the relay is bi-stable, the selected channel remains even 
+* if power has been removed.
+*
+* \param relay_value - 0 selects channel 0, 1 selects channel 1 and
+* 2 turns off the relay coil to preserve power. The contacts remain
+* mechanically latched in the last state.
+* 
+* \return None.
+*/
 void relay_set(uint8_t relay_value){
     if(relay_value == 0){
         selected_channel = 0;
