@@ -17,6 +17,8 @@ CH? - get selected channel. Returns either "\nCH0 selected!\n" or
   
 If you enter unsupported command, or if the command synthax is wrong, the string "\nWrong command!\n" is returned. After channel selection, a 3-second timeout is implemented, then the selected channel  number is saved in EEPROM. This makes the device to return the string "\nSaving in EEPROM ...\n". If a keyboard button is pressed, the device returns either the string "\nCH0 selected!\n" or "\nCH1 selected!\n".  
 
-The source code builds with Microchip's MPLAB X IDE v6.30 and their compiler XC8 v3.10.  
+The source code builds with Microchip's MPLAB X IDE v6.30 and their compiler XC8 v3.10. 
+
+For a PC-based application to control the device check the dual_aux_app, in the deploy directory you can find binaries for Windows and Linux. 
 
 
