@@ -24,9 +24,11 @@
 #define _XTAL_FREQ 4000000
 
 #define RX_BUFF_LEN         32
-#define IDN_STRING          "\nDualAUX,hw1.0,sw1.0\n\r"
+#define IDN_STRING          "\nDualAUX,hw1.0,sw1.1\n\r"
 #define CH0_SELECTED_STRING "\nCH0 selected!\n"
 #define CH1_SELECTED_STRING "\nCH1 selected!\n"
+#define LEDS_ON_STRING      "\nLEDS are on!\n"
+#define LEDS_OFF_STRING     "\nLEDS are off!\n"
 #define DEBOUNCE_DELAY_MS   100
 
 void h_bridge_set(uint8_t value);
@@ -42,6 +44,7 @@ volatile uint8_t selected_channel_by_key = 2;
 volatile uint8_t index = 0;
 volatile uint8_t timeout_count = 0;
 volatile uint8_t save_to_eeprom = 0;
+volatile uint8_t leds_enabled = 0;
 
 /*!
 * \brief The peripheral interrupt service handler.
@@ -294,7 +297,13 @@ void leds_blink(uint8_t led_number, uint8_t num_of_blinks){
         __delay_ms(100);
     } 
     
-    leds_set(led_number,1);
+    if(leds_enabled){
+        leds_set(led_number,1);
+    }
+    else{
+        //For just in case :-)
+        leds_set(led_number,0);
+    }
 }
 
 /*!
@@ -403,8 +412,11 @@ void relay_set(uint8_t relay_value){
         h_bridge_set(0);
         __delay_ms(50);
         h_bridge_set(2);
-        leds_set(0, 1);
-        leds_set(1, 0);
+        
+        if(leds_enabled){
+            leds_set(0, 1);
+            leds_set(1, 0);
+        }
     }
     
     if(relay_value == 1){
@@ -412,8 +424,11 @@ void relay_set(uint8_t relay_value){
         h_bridge_set(1);
         __delay_ms(50);
         h_bridge_set(2);
-        leds_set(0, 0);
-        leds_set(1, 1);  
+        
+        if(leds_enabled){
+            leds_set(0, 0);
+            leds_set(1, 1);  
+        }
     }
 }
 
@@ -421,23 +436,25 @@ void relay_set(uint8_t relay_value){
 * \brief A function to read one byte from the first
 * addess of the EEPROM memory.
 *
-* This function reads the value stored in address 0x7000.
-* This is the first address of the EEPROM memory. Note
-* that MPLAB X IDE erases the EEPROM upon program flashing.
+* This function reads a value stored in the EEPROM memory. 
+* Note that MPLAB X IDE erases the EEPROM upon program flashing.
 * If you want to retain the state of the EEPROM, select
 * the option "Preserve EEPROM Memory" from the debugger's 
 * menu.
 *
+* \param address - a 16-bit address to read from, starting at 
+* 0x7000 and ending at 0x70ff.
+*
 * \return The value stored in the first memory location 
 * of EEPROM. The number ranges 0 - 255.
 */
-uint8_t read_eeprom_r(void){
+uint8_t read_eeprom_r(uint16_t address){
     uint8_t result = 0;
     
     NVMCON1bits.NVMREGS = 1;
 
-    NVMADRL = 0x00;
-    NVMADRH = 0x70;
+    NVMADRL = (uint8_t)address;
+    NVMADRH = address>>8;
     NVMCON1bits.RD = 1;
     
     while(NVMCON1bits.RD);
@@ -450,18 +467,20 @@ uint8_t read_eeprom_r(void){
 /*!
 * \brief A function to write a value to the EEPROM memory.
 *
-* This function writes an 8-bit value to the first memory
-* location of the EEPROM. It can be paired with read_eeprom_r().
+* This function writes an 8-bit value to a memory location
+* inside the EEPROM. It can be paired with read_eeprom_r().
 * 
+* \param address - a 16-bit address to write to, starting at 
+* 0x7000 and ending at 0x70ff.
 * \param value - a number between 0 and 255 to be written to the
 * EEPROM.
 *
 * \return None.
 */
-void write_eeprom_r(uint8_t value){
-    NVMCON1bits.NVMREGS = 1;   // EEPROM
-    NVMADRL = 0x00;
-    NVMADRH = 0x70;
+void write_eeprom_r(uint16_t address, uint8_t value){
+    NVMCON1bits.NVMREGS = 1;   //Select EEPROM for programming
+    NVMADRL = (uint8_t)address;
+    NVMADRH = address>>8;
 
     NVMDATL = value;
 
@@ -540,7 +559,9 @@ void timer1_start(void){
 void main(void){
     uint8_t state;
     int match;
+    int match2;
     char selected_channel_str[4];
+    char leds_enabled_str[4];
     
     OSCCON1 = 0x70; //External OSC=4MHz, div=1
     
@@ -554,24 +575,39 @@ void main(void){
     h_bridge_init();    
     
     __delay_ms(1);
+    
+    leds_enabled = read_eeprom_r(0x7008);
+    
+    if(leds_enabled != 0 && leds_enabled != 1){
+        print_line("2. EEPROM read error! ");  
+        byte_to_hex(leds_enabled, leds_enabled_str);
+        print_line(leds_enabled_str);
+        print_line("Defaulting to leds on!\n");
+        leds_enabled = 1;
+        write_eeprom_r(0x7008, leds_enabled);
+    }
 
-    selected_channel = read_eeprom_r();
+    selected_channel = read_eeprom_r(0x7000);
     
     if(selected_channel != 0 && selected_channel != 1){
-        print_line("EEPROM read error! Defaulting to CH0!\n"); 
+        print_line("1. EEPROM read error! "); 
         byte_to_hex(selected_channel, selected_channel_str);
         print_line(selected_channel_str);
+        print_line("Defaulting to CH0!\n"); 
         selected_channel = 0;
-        write_eeprom_r(selected_channel);
+        write_eeprom_r(0x7000, selected_channel);
     }
     
-    relay_set(selected_channel);
-    
-    byte_to_hex(selected_channel, selected_channel_str);
-    
+    relay_set(selected_channel);    
+        
+    byte_to_hex(selected_channel, selected_channel_str);    
     print_line(IDN_STRING);    
     print_line("Selected channel: ");
-    print_line(selected_channel_str);    
+    print_line(selected_channel_str); 
+    
+    byte_to_hex(leds_enabled, leds_enabled_str);        
+    print_line("Leds enabled flag: ");
+    print_line(leds_enabled_str); 
     
     INTCONbits.PEIE = 1;  // Peripheral interrupts
     INTCONbits.GIE = 1;   // Global interrupts
@@ -645,6 +681,63 @@ void main(void){
                 asm("reset");
                 while(1){ }
             }
+            
+            match = strcmp("LEDS?\n", rx_buff);
+            if(match == 0){
+                if(leds_enabled == 0){
+                    print_line(LEDS_OFF_STRING);  
+                }
+                
+                if(leds_enabled == 1){
+                    print_line(LEDS_ON_STRING);                      
+                }
+                continue;
+            }
+            
+            match = strcmp("LEDS ON\n", rx_buff);
+            if(match == 0){
+                leds_enabled = 1;
+                leds_set(selected_channel, 1);
+                print_line(LEDS_ON_STRING);    
+                state = read_eeprom_r(0x7008);            
+                if(state != leds_enabled){ 
+                    print_line("\n2. Saving in EEPROM ...\n"); 
+                    write_eeprom_r(0x7008, leds_enabled);  
+                }            
+                continue;
+            }
+            
+            match = strcmp("LEDS OFF\n", rx_buff);
+            if(match == 0){
+                leds_enabled = 0;
+                leds_set(0, 0);
+                leds_set(1, 0);
+                print_line(LEDS_OFF_STRING);    
+                state = read_eeprom_r(0x7008);            
+                if(state != leds_enabled){ 
+                    print_line("\n3. Saving in EEPROM ...\n"); 
+                    write_eeprom_r(0x7008, leds_enabled);  
+                }            
+                continue;
+            }
+            
+            match = strcmp("help\n", rx_buff);
+            match2 = strcmp("HELP\n", rx_buff);
+            if((match == 0) || (match2 == 0)){
+                print_line("\nSupported commands:\n");  
+                print_line("-------------------\n");  
+                print_line("*IDN? - get device hardware and software revision.\n"); 
+                print_line("*RST - reset device.\n"); 
+                print_line("CH0 - select channel 0.\n");  
+                print_line("CH1 - select channel 1.\n");
+                print_line("CH? - get selected channel number.\n");
+                print_line("LEDS ON - turn on led indication.\n");
+                print_line("LEDS OFF - turn off led indication.\n");
+                print_line("LEDS? - get whether leds are on or off.\n");  
+                print_line("help - display this help.\n");  
+                print_line("HELP - display this help.\n");  
+                continue;
+            }
 
             if(match){
                 print_line("\nWrong command!\n");   
@@ -654,11 +747,11 @@ void main(void){
         if(save_to_eeprom){
             save_to_eeprom = 0;            
             
-            state = read_eeprom_r();
+            state = read_eeprom_r(0x7000);
             
             if(state != selected_channel){ 
-                print_line("\nSaving in EEPROM ...\n"); 
-                write_eeprom_r(selected_channel);  
+                print_line("\n1. Saving in EEPROM ...\n"); 
+                write_eeprom_r(0x7000, selected_channel);  
             }            
             
             leds_blink(selected_channel, 3);
